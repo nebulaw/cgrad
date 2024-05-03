@@ -1,83 +1,130 @@
 #include "cgrad.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
+#include <assert.h>
 
 
-Value createvalue(float value, Value *pa, Value *pb, int fn_op, int requires_grad)
+Value *createconst(float float_value)
 {
-  Value v;
-  v.value = value;
-  v.grad = 0.0f;
-  v.out_grad = 0.0f;
-  v.fn_op = fn_op;
-  v.requires_grad = requires_grad;
-  v.pa = pa;
-  v.pb = pb;
-  switch (fn_op) {
-  case FN_ADD:
-    v.backward = bwadd;
-    v.fn_type = FN_BINARY;
-    break;
-  case FN_MUL:
-    v.backward = bwmul;
-    v.fn_type = FN_BINARY;
-    break;
-  case FN_POW:
-    v.backward = bwpow;
-    v.fn_type = FN_UNARY;
-    break;
-  default:
-    v.backward = bwnone;
-    v.fn_type = FN_NONE;
-    break;
+  Value *value = malloc(sizeof(Value));
+  value->value = float_value;
+  value->grad = 0.0f;
+  value->value = float_value;
+  value->grad = 0.0f;
+  value->out_grad = 0.0f;
+  value->requires_grad = 0;
+  value->fn_op = FN_NONE;
+  value->fn_type = FN_NONE;
+  value->pa = NULL;
+  value->pb = NULL;
+  value->backward = bwnone;
+  return value;
+}
+
+Value *createvalue(float value, Value *pa, Value *pb, int fn_op, int requires_grad)
+{
+  Value *v = malloc(sizeof(Value));
+  v->value = value;
+  v->grad = 0.0f;
+  v->out_grad = 0.0f;
+  v->fn_op = fn_op;
+  v->requires_grad = requires_grad;
+  v->pa = pa;
+  v->pb = pb;
+  v->fn_type = FN_NONE | fn_op;
+  v->backward = bwnone;
+  return v;
+}
+
+Value *createempty(void)
+{
+  return createconst(0.0f);
+}
+
+Value *copy(Value *value)
+{
+  Value *v = malloc(sizeof(Value));
+  v->value = value->value;
+  v->grad = value->grad;
+  v->out_grad = value->out_grad;
+  v->fn_op = value->fn_op;
+  v->requires_grad = value->requires_grad;
+  v->pa = value->pa;
+  v->pb = value->pb;
+  v->fn_type = value->fn_type;
+  v->backward = value->backward;
+  return v;
+}
+
+void deletevalue(Value *value)
+{
+  free(value);
+}
+
+void deletevalues(int n, ...)
+{
+  va_list ap;
+  va_start(ap, n);
+  for (int i = 0; i < n; i++) {
+    free(va_arg(ap, Value *));
   }
+  va_end(ap);
+}
+
+void deletechain(Value *value)
+{
+  if (!value) {
+    return;
+  }
+  if (value->pa) {
+    deletechain(value->pa);
+  }
+  if (value->pb) {
+    deletechain(value->pb);
+  }
+  deletevalue(value);
+}
+
+Value *fwadd(Value *a, Value *b)
+{
+  assert(a != NULL && b != NULL);
+  Value *v = createvalue(a->value + b->value, a, b, FN_ADD, 0);
+  v->backward = bwadd;
   return v;
 }
 
-Value createnone(void)
+Value *fwmul(Value *a, Value *b)
 {
-  Value v;
-  v.value = 0.0f;
-  v.grad = 0.0f;
-  v.out_grad = 0.0f;
-  v.requires_grad = 0;
-  v.fn_op = FN_NONE;
-  v.fn_type = FN_NONE;
-  v.pa = NULL;
-  v.pb = NULL;
-  v.backward = NULL;
+  assert(a != NULL && b != NULL);
+  Value *v = createvalue(a->value * b->value, a, b, FN_MUL, 0);
+  v->backward = bwmul;
   return v;
 }
 
-Value copy(Value *value)
+Value *fwpow(Value *a, Value *b)
 {
-  Value v;
-  v.value = value->value;
-  v.grad = value->grad;
-  v.out_grad = value->grad;
-  v.requires_grad = value->requires_grad;
-  v.pa = value->pa;
-  v.pb = value->pb;
-  v.fn_type = value->fn_type;
-  v.fn_op = value->fn_op;
-  v.backward = value->backward;
+  assert(a != NULL && b != NULL);
+  Value *v = createvalue(powf(a->value, b->value), a, b, FN_POW, 0);
+  v->backward = bwpow;
   return v;
 }
 
-Value fwadd(Value *a, Value *b)
+Value *fwsub(Value *a, Value *b)
 {
-  return a && b ? createvalue(a->value + b->value, a, b, FN_ADD, 0) : createnone();
+  assert(a != NULL && b != NULL);
+  Value *v = fwadd(a, fwmul(b, createconst(-1.0f)));
+  v->backward = bwadd;
+  return v;
 }
 
-Value fwmul(Value *a, Value *b)
+Value *fwdiv(Value *a, Value *b)
 {
-  return a && b ? createvalue(a->value * b->value, a, b, FN_MUL, 0) : createnone();
-}
-
-Value fwpow(Value *a, Value *b)
-{
-  return a && b ? createvalue(powf(a->value, b->value), a, b, FN_POW, 0) : createnone();
+  assert(a != NULL && b != NULL);
+  Value *v = fwmul(a, fwpow(b, createconst(-1.0f)));
+  v->pb->requires_grad = b->requires_grad;
+  return v;
 }
 
 void bwnone(Value *)

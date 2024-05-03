@@ -6,9 +6,10 @@
 #define FN_MUL      8
 #define FN_POW      32
 
-#define FN_UNARY    2
-#define FN_BINARY   4
+#define FN_UNARY    0
+#define FN_BINARY   1
 
+#include <stdarg.h>
 
 typedef struct Value {
   float value;
@@ -23,15 +24,19 @@ typedef struct Value {
 } Value;
 
 
-Value createvalue(float value, Value *pa, Value *pb, int fn_op, int requires_grad);
-Value createnone(void);
-Value copy(Value *);
+Value *createconst(float value);
+Value *createvalue(float value, Value *pa, Value *pb, int fn_op, int requires_grad);
+Value *createempty(void);
+Value *copy(Value *);
+void deletevalue(Value *value);
+void deletevalues(int n, ...);
+void deletechain(Value *value);
 
-Value fwadd(Value *a, Value *b);
-Value fwmul(Value *a, Value *b);
-Value fwpow(Value *a, Value *b);
-Value fwsub(Value *a, Value *b);
-Value fwdiv(Value *a, Value *b);
+Value *fwadd(Value *a, Value *b);
+Value *fwmul(Value *a, Value *b);
+Value *fwpow(Value *a, Value *b);
+Value *fwsub(Value *a, Value *b);
+Value *fwdiv(Value *a, Value *b);
 
 void bwnone(Value *);
 void bwadd(Value *);
