@@ -43,3 +43,22 @@ make run-example EXAMPLE=xor
 or directly:
 
 `gcc -I. -o example examples/<name>.c cgrad.c -lm && ./example`
+
+## dot export
+
+the engine can export a computation graph in graphviz dot format:
+
+```c
+FILE *out = fopen("graph.dot", "w");
+dumpdot(root, out);
+fclose(out);
+```
+
+there is also a small export example:
+
+```sh
+make run-example EXAMPLE=graph
+dot -Tpng target/cgrad.dot -o target/cgrad.png
+```
+
+![cgrad graph](assets/cgrad.png)

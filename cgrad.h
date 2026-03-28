@@ -1,15 +1,16 @@
 #ifndef SMOL_AUTOGRAD
 #define SMOL_AUTOGRAD
 
-#define FN_NONE     0
-#define FN_ADD      2
-#define FN_MUL      8
-#define FN_POW      32
+#define FN_NONE 0
+#define FN_ADD 2
+#define FN_MUL 8
+#define FN_POW 32
 
-#define FN_UNARY    0
-#define FN_BINARY   1
+#define FN_UNARY 0
+#define FN_BINARY 1
 
 #include <stdarg.h>
+#include <stdio.h>
 
 typedef struct Value {
   float value;
@@ -23,9 +24,9 @@ typedef struct Value {
   void (*backward)(struct Value *self);
 } Value;
 
-
 Value *createconst(float value);
-Value *createvalue(float value, Value *pa, Value *pb, int fn_op, int requires_grad);
+Value *createvalue(float value, Value *pa, Value *pb, int fn_op,
+                   int requires_grad);
 Value *createempty(void);
 Value *copy(Value *);
 void deletevalue(Value *value);
@@ -44,5 +45,6 @@ void bwmul(Value *v);
 void bwpow(Value *v);
 
 void backward(Value *value, int init_grad);
+void dumpdot(Value *value, FILE *out);
 
 #endif // SMOL_AUTOGRAD

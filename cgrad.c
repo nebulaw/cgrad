@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -75,6 +76,19 @@ static void buildtopo(Value *v, Value ***topo, int *count, int *capacity) {
     *topo = realloc(*topo, *capacity * sizeof(Value *));
   }
   (*topo)[(*count)++] = v;
+}
+
+static const char *oplabel(int fn_op) {
+  switch (fn_op) {
+  case FN_ADD:
+    return "+";
+  case FN_MUL:
+    return "*";
+  case FN_POW:
+    return "^";
+  default:
+    return "?";
+  }
 }
 
 // collect the whole graph once, then free each node exactly once.
@@ -175,6 +189,50 @@ void backward(Value *value, int init_grad) {
     if (topo[i]->backward) {
       topo[i]->backward(topo[i]);
     }
+    topo[i]->visited = 0;
+  }
+  free(topo);
+}
+
+void dumpdot(Value *value, FILE *out) {
+  if (!value || !out)
+    return;
+
+  Value **topo = NULL;
+  int count = 0, capacity = 0;
+  buildtopo(value, &topo, &count, &capacity);
+
+  fprintf(out, "digraph cgrad {\n");
+  fprintf(out, "  rankdir=LR;\n");
+  fprintf(out, "  node [shape=record];\n");
+
+  for (int i = 0; i < count; i++) {
+    Value *node = topo[i];
+    unsigned long id = (unsigned long)(uintptr_t)node;
+
+    fprintf(out, "  \"val_%lu\" [label=\"{value %.4f|grad %.4f}\"];\n", id,
+            node->value, node->grad);
+
+    if (node->fn_op == FN_NONE)
+      continue;
+
+    fprintf(out, "  \"op_%lu\" [label=\"%s\", shape=circle];\n", id,
+            oplabel(node->fn_op));
+    fprintf(out, "  \"op_%lu\" -> \"val_%lu\";\n", id, id);
+
+    if (node->pa) {
+      fprintf(out, "  \"val_%lu\" -> \"op_%lu\";\n",
+              (unsigned long)(uintptr_t)node->pa, id);
+    }
+    if (node->pb) {
+      fprintf(out, "  \"val_%lu\" -> \"op_%lu\";\n",
+              (unsigned long)(uintptr_t)node->pb, id);
+    }
+  }
+
+  fprintf(out, "}\n");
+
+  for (int i = 0; i < count; i++) {
     topo[i]->visited = 0;
   }
   free(topo);
