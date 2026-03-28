@@ -10,6 +10,7 @@ typedef struct Sample {
 
 static Value *predict(Value *w1, Value *w2, Value *w3, Value *bias, Value *x1,
                       Value *x2) {
+  // tiny hand-written model: linear terms plus one interaction term.
   Value *x1_term = fwmul(w1, x1);
   Value *x2_term = fwmul(w2, x2);
   Value *interaction = fwmul(x1, x2);
@@ -35,6 +36,7 @@ int main(void) {
   const int epochs = 800;
 
   for (int epoch = 0; epoch < epochs; epoch++) {
+    // fresh parameter nodes each step. the graph is rebuilt from scratch.
     Value *vw1 = createvalue(w1, NULL, NULL, FN_NONE, 1);
     Value *vw2 = createvalue(w2, NULL, NULL, FN_NONE, 1);
     Value *vw3 = createvalue(w3, NULL, NULL, FN_NONE, 1);
@@ -42,6 +44,7 @@ int main(void) {
     Value *loss = createconst(0.0f);
 
     for (int i = 0; i < sample_count; i++) {
+      // run one sample through the graph and stack up mean squared error.
       Value *x1 = createconst(samples[i].x1);
       Value *x2 = createconst(samples[i].x2);
       Value *target = createconst(samples[i].y);
@@ -53,6 +56,7 @@ int main(void) {
 
     loss = fwmul(loss, createconst(1.0f / (float)sample_count));
 
+    // reverse the graph, read parameter grads, take a small step downhill.
     backward(loss, 1);
 
     w1 -= learning_rate * vw1->grad;
@@ -70,6 +74,7 @@ int main(void) {
 
   printf("\ntrained predictions\n");
   for (int i = 0; i < sample_count; i++) {
+    // inference is just the closed-form expression with trained scalars.
     float pred = bias + (w1 * samples[i].x1) + (w2 * samples[i].x2) +
                  (w3 * samples[i].x1 * samples[i].x2);
     printf("xor(%0.f, %0.f) -> %0.4f\n", samples[i].x1, samples[i].x2, pred);

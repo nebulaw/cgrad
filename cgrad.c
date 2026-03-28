@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 Value *createconst(float float_value) {
+  // plain scalar leaf: no parents, no local backward rule.
   Value *value = malloc(sizeof(Value));
   value->value = float_value;
   value->grad = 0.0f;
@@ -21,6 +22,7 @@ Value *createconst(float float_value) {
 
 Value *createvalue(float value, Value *pa, Value *pb, int fn_op,
                    int requires_grad) {
+  // op node: store result, wire parents, plug in backward rule later.
   Value *v = malloc(sizeof(Value));
   v->value = value;
   v->grad = 0.0f;
@@ -61,7 +63,7 @@ void deletevalues(int n, ...) {
   va_end(ap);
 }
 
-// standard dfs topo sort. don't overthink it.
+// dfs the graph, parents first, then stash the node for reverse-time.
 static void buildtopo(Value *v, Value ***topo, int *count, int *capacity) {
   if (!v || v->visited)
     return;
@@ -75,7 +77,7 @@ static void buildtopo(Value *v, Value ***topo, int *count, int *capacity) {
   (*topo)[(*count)++] = v;
 }
 
-// free the mallocs
+// collect the whole graph once, then free each node exactly once.
 void deletechain(Value *value) {
   if (!value)
     return;
@@ -90,6 +92,7 @@ void deletechain(Value *value) {
 
 Value *fwadd(Value *a, Value *b) {
   assert(a != NULL && b != NULL);
+  // forward pass: add now, remember how to split grad later.
   Value *v = createvalue(a->value + b->value, a, b, FN_ADD, 0);
   v->backward = bwadd;
   return v;
@@ -97,6 +100,7 @@ Value *fwadd(Value *a, Value *b) {
 
 Value *fwmul(Value *a, Value *b) {
   assert(a != NULL && b != NULL);
+  // multiply on the way forward, use the other input on the way back.
   Value *v = createvalue(a->value * b->value, a, b, FN_MUL, 0);
   v->backward = bwmul;
   return v;
@@ -104,6 +108,7 @@ Value *fwmul(Value *a, Value *b) {
 
 Value *fwpow(Value *a, Value *b) {
   assert(a != NULL && b != NULL);
+  // power op is just another node in the graph, same deal.
   Value *v = createvalue(powf(a->value, b->value), a, b, FN_POW, 0);
   v->backward = bwpow;
   return v;
@@ -111,12 +116,14 @@ Value *fwpow(Value *a, Value *b) {
 
 Value *fwsub(Value *a, Value *b) {
   assert(a != NULL && b != NULL);
+  // subtraction is add with a negated rhs. keep primitives small.
   Value *v = fwadd(a, fwmul(b, createconst(-1.0f)));
   return v;
 }
 
 Value *fwdiv(Value *a, Value *b) {
   assert(a != NULL && b != NULL);
+  // division is multiply by b^-1, which lets pow do the heavy lifting.
   Value *v = fwmul(a, fwpow(b, createconst(-1.0f)));
   v->pb->requires_grad = b->requires_grad;
   return v;
@@ -125,6 +132,7 @@ Value *fwdiv(Value *a, Value *b) {
 void bwnone(Value *v) { (void)v; }
 
 void bwadd(Value *value) {
+  // z = x + y, so incoming grad flows straight to both parents.
   if (value->pa)
     value->pa->grad += value->grad;
   if (value->pb)
@@ -132,13 +140,14 @@ void bwadd(Value *value) {
 }
 
 void bwmul(Value *value) {
+  // z = x * y, so each parent gets the other parent's value times dz.
   if (value->pa)
     value->pa->grad += value->pb->value * value->grad;
   if (value->pb)
     value->pb->grad += value->pa->value * value->grad;
 }
 
-// d/da = b*a^(b-1), d/db = a^b * ln(a). math.
+// z = a^b. one grad for the base, one for the exponent when log is valid.
 void bwpow(Value *value) {
   if (value->pa) {
     value->pa->grad +=
@@ -150,7 +159,7 @@ void bwpow(Value *value) {
   }
 }
 
-// backward pass goes brrr
+// build a topo order, seed the output grad, then walk backward through time.
 void backward(Value *value, int init_grad) {
   if (!value)
     return;
